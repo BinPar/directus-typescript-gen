@@ -3,7 +3,7 @@
 import { promises } from "fs";
 import { resolve } from "path";
 
-import { snakeCase } from "change-case";
+import { camelCase } from "change-case";
 import fetch from "node-fetch";
 import { z } from "zod";
 import yargs from "yargs";
@@ -55,6 +55,22 @@ const main = async (): Promise<void> => {
     })
   ).json();
 
+  const collections = (await (
+    await fetch(`${host}/collections`, {
+      method: `get`,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  ).json()) as { data: { collection: string }[] };
+
+  const collectionsNames = new Map<string, string>(
+    collections.data.map(({ collection }) => [
+      collection.replace(/_/g, ``).toLowerCase(),
+      collection,
+    ]),
+  );
+
   if (specOutFile) {
     await promises.writeFile(
       resolve(process.cwd(), specOutFile),
@@ -69,27 +85,53 @@ const main = async (): Promise<void> => {
 
   const itemPattern = /^    Items([^\:]*)/;
 
+  const interfacesToAvoid = new Set([`paths`, `operations`]);
+  const lines = new Array<string>();
+  let addLine = true;
+
   const exportProperties = baseSource
     .split(`\n`)
     .map((line) => {
+      if (line.startsWith(`export interface`)) {
+        const interfaceName = line.split(` `)[2];
+        addLine = !interfacesToAvoid.has(interfaceName);
+      }
+      if (addLine) {
+        lines.push(line);
+      }
       const match = line.match(itemPattern);
       if (!match) {
         return null;
       }
       const [, collectionName] = match;
-      const propertyKey = snakeCase(collectionName);
-      return `  ${propertyKey}: components["schemas"]["Items${collectionName}"];`;
+      const realCollectionName = collectionsNames.get(
+        collectionName.toLowerCase(),
+      );
+      return `  ${
+        realCollectionName || camelCase(collectionName)
+      }: components["schemas"]["Items${collectionName}"];`;
     })
-    .filter((line): line is string => typeof line === `string`)
-    .join(`\n`);
+    .filter((line): line is string => typeof line === `string`);
 
-  const exportSource = `export type ${typeName} = {\n${exportProperties}\n};`;
+  exportProperties.push(
+    ...[
+      `  directus_users: components["schemas"]["Users"];`,
+      `  directus_roles: components["schemas"]["Roles"];`,
+      `  directus_files: components["schemas"]["Files"];`,
+    ],
+  );
 
-  const source = [baseSource, exportSource].join(`\n`);
+  const exportSource = `export type ${typeName} = {\n${exportProperties.join(
+    `\n`,
+  )}\n};`;
 
-  await promises.writeFile(resolve(process.cwd(), outFile), source, {
-    encoding: `utf-8`,
-  });
+  await promises.writeFile(
+    resolve(process.cwd(), outFile),
+    [...lines, exportSource].join(`\n`),
+    {
+      encoding: `utf-8`,
+    },
+  );
 };
 
 if (require.main === module) {
