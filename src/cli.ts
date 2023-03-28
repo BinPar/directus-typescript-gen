@@ -118,6 +118,7 @@ const main = async (): Promise<void> => {
       `  directus_users: components["schemas"]["Users"];`,
       `  directus_roles: components["schemas"]["Roles"];`,
       `  directus_files: components["schemas"]["Files"];`,
+      `  directus_folders: components["schemas"]["Folders"];`,
     ],
   );
 
