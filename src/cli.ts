@@ -55,6 +55,7 @@ interface FieldInfo {
   schema?: {
     is_nullable: boolean;
     is_primary_key: boolean;
+    foreign_key_table?: string | null;
   };
   meta: {
     options?: {
@@ -140,18 +141,18 @@ const getTypesText = (
   if (relation) {
     const collection = collectionsMap.get(relation.table);
     if (collection) {
-      res.push(collection.key);
       const type = collectionIdType.get(relation.table);
       if (type) {
         res.push(type);
       }
+      res.push(collection.key);
     } else {
       console.error(`Collection not found for table ${relation.table}`);
     }
   }
-  return `${relation?.multiple ? `(` : ``}${res.join(` | `)}${
-    relation?.multiple ? `)[]` : ``
-  }${nullable ? ` | null` : ``}`;
+  return `${res
+    .map((r) => `${r}${relation?.multiple ? `[]` : ``}`)
+    .join(` | `)}${nullable ? ` | null` : ``}`;
 };
 
 const main = async (): Promise<void> => {
@@ -285,6 +286,15 @@ const main = async (): Promise<void> => {
             `Table not found for relation ${fieldInfo.field} (${fieldInfo.collection})`,
           );
         }
+      }
+
+      if (
+        fieldInfo.schema?.foreign_key_table &&
+        fieldInfo.meta.special?.some((s) => s === `m2o`)
+      ) {
+        field.relation = {
+          table: fieldInfo.schema?.foreign_key_table,
+        };
       }
 
       if (!field.relation) {
