@@ -57,7 +57,7 @@ interface FieldInfo {
     is_primary_key: boolean;
     foreign_key_table?: string | null;
   };
-  meta: {
+  meta?: {
     options?: {
       choices?: {
         value: string;
@@ -102,7 +102,7 @@ const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
 const getTypes = (
   field: string,
   directusType: string,
-  meta: FieldInfo[`meta`],
+  meta?: FieldInfo[`meta`],
 ): string[] => {
   const res = new Array<string>();
 
@@ -113,9 +113,9 @@ const getTypes = (
     if (
       !fieldsToAvoidChoices.has(field) &&
       directusType !== `json` &&
-      meta.options?.choices?.length
+      meta?.options?.choices?.length
     ) {
-      meta.options.choices.forEach((choice) => {
+      meta?.options.choices.forEach((choice) => {
         const surrounding = type !== `number` ? `'` : ``;
         res.push(`${surrounding}${choice.value}${surrounding}`);
       });
@@ -290,7 +290,7 @@ const main = async (): Promise<void> => {
 
       if (
         fieldInfo.schema?.foreign_key_table &&
-        fieldInfo.meta.special?.some((s) => s === `m2o`)
+        fieldInfo.meta?.special?.some((s) => s === `m2o`)
       ) {
         field.relation = {
           table: fieldInfo.schema?.foreign_key_table,
