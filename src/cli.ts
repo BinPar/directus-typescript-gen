@@ -63,6 +63,7 @@ interface FieldInfo {
       }[];
     };
     special?: string[];
+    interface?: string;
   };
 }
 
@@ -100,24 +101,29 @@ const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
 const getTypes = (
   field: string,
   directusType: string,
-  options?: FieldInfo[`meta`][`options`],
+  meta: FieldInfo[`meta`],
 ): string[] => {
   const res = new Array<string>();
-  const type = types.get(directusType);
-  if (
-    !fieldsToAvoidChoices.has(field) &&
-    directusType !== `json` &&
-    options?.choices?.length
-  ) {
-    options.choices.forEach((choice) => {
-      const surrounding = type !== `number` ? `'` : ``;
-      res.push(`${surrounding}${choice.value}${surrounding}`);
-    });
+
+  if (directusType === `json` && meta?.interface === `tags`) {
+    res.push(`string[]`);
   } else {
-    if (type) {
-      res.push(type);
+    const type = types.get(directusType);
+    if (
+      !fieldsToAvoidChoices.has(field) &&
+      directusType !== `json` &&
+      meta.options?.choices?.length
+    ) {
+      meta.options.choices.forEach((choice) => {
+        const surrounding = type !== `number` ? `'` : ``;
+        res.push(`${surrounding}${choice.value}${surrounding}`);
+      });
     } else {
-      console.error(`Type ${directusType} missing`);
+      if (type) {
+        res.push(type);
+      } else {
+        console.error(`Type ${directusType} missing`);
+      }
     }
   }
   return res;
@@ -168,11 +174,12 @@ const main = async (): Promise<void> => {
       method: `post`,
       body: JSON.stringify({ email, password, mode: `json` }),
       headers: {
-        // eslint-disable-next-line prettier/prettier
-        'Content-Type': `application/json`,
+        "Content-Type": `application/json`,
       },
     })
   ).json();
+
+  console.log({ token });
 
   const headers: RequestInit[`headers`] = {
     Authorization: `Bearer ${token}`,
@@ -284,7 +291,7 @@ const main = async (): Promise<void> => {
         field.posibleTypes = getTypes(
           fieldInfo.field,
           fieldInfo.type,
-          fieldInfo.meta.options,
+          fieldInfo.meta,
         );
       }
 
