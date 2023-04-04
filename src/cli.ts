@@ -1,38 +1,165 @@
 #!/usr/bin/env node
 
-import { promises } from "fs";
+import { writeFile } from "fs/promises";
 import { resolve } from "path";
 
-import { camelCase } from "change-case";
-import fetch from "node-fetch";
+import fetch, { RequestInit } from "node-fetch";
 import { z } from "zod";
 import yargs from "yargs";
-import openApiTs, { OpenAPI3 } from "openapi-typescript";
+import { pascalCase } from "change-case";
 
 const Argv = z.object({
-  host: z.string(),
+  host: z.string().default(`http://0.0.0.0:8055`),
   email: z.string(),
   password: z.string(),
-  typeName: z.string(),
-  specOutFile: z.string().nullish(),
-  outFile: z.string(),
+  typeName: z.string().default(`DirectusTypes`),
+  outFile: z.string().default(`directus.ts`),
 });
 
 type Argv = z.infer<typeof Argv>;
 
+interface Field {
+  key: string;
+  required?: boolean;
+  nullable?: boolean;
+  posibleTypes: string[];
+  relation?: {
+    table: string;
+    multiple?: boolean;
+  };
+}
+
+interface Collection {
+  table: string;
+  key: string;
+  fields: Field[];
+}
+
+interface Relation {
+  collection: string;
+  field: string;
+  related_collection: string;
+  meta?: {
+    many_collection?: string;
+    many_field?: string;
+    one_collection?: string;
+    one_field?: string;
+  };
+}
+
+interface FieldInfo {
+  collection: string;
+  field: string;
+  type: string;
+  required: boolean;
+  schema?: {
+    is_nullable: boolean;
+    is_primary_key: boolean;
+  };
+  meta: {
+    options?: {
+      choices?: {
+        value: string;
+      }[];
+    };
+    special?: string[];
+  };
+}
+
+interface CollectionInfo {
+  collection: string;
+  meta: {
+    translations?: {
+      language: string;
+      translation: string;
+      singular?: string;
+    }[];
+  };
+}
+
+const types = new Map<string, string>([
+  [`string`, `string`],
+  [`uuid`, `string`],
+  [`timestamp`, `string`],
+  [`dateTime`, `string`],
+  [`date`, `string`],
+  [`integer`, `number`],
+  [`boolean`, `boolean`],
+  [`text`, `string`],
+  [`json`, `string`],
+  [`alias`, `number`],
+  [`csv`, `string`],
+  [`bigInteger`, `number`],
+  [`hash`, `string`],
+  [`float`, `number`],
+]);
+
+const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
+const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
+
+const getTypes = (
+  field: string,
+  directusType: string,
+  options?: FieldInfo[`meta`][`options`],
+): string[] => {
+  const res = new Array<string>();
+  const type = types.get(directusType);
+  if (
+    !fieldsToAvoidChoices.has(field) &&
+    directusType !== `json` &&
+    options?.choices?.length
+  ) {
+    options.choices.forEach((choice) => {
+      const surrounding = type !== `number` ? `'` : ``;
+      res.push(`${surrounding}${choice.value}${surrounding}`);
+    });
+  } else {
+    if (type) {
+      res.push(type);
+    } else {
+      console.error(`Type ${directusType} missing`);
+    }
+  }
+  return res;
+};
+
+const getTypesText = (
+  fieldTypes: string[],
+  collectionsMap: Map<string, Collection>,
+  collectionIdType: Map<string, string>,
+  nullable?: boolean,
+  relation?: Field[`relation`],
+): string => {
+  const res = new Array<string>(...fieldTypes);
+  if (relation) {
+    const collection = collectionsMap.get(relation.table);
+    if (collection) {
+      res.push(collection.key);
+      const type = collectionIdType.get(relation.table);
+      if (type) {
+        res.push(type);
+      }
+    } else {
+      console.error(`Collection not found for table ${relation.table}`);
+    }
+  }
+  return `${relation?.multiple ? `(` : ``}${res.join(` | `)}${
+    relation?.multiple ? `)[]` : ``
+  }${nullable ? ` | null` : ``}`;
+};
+
 const main = async (): Promise<void> => {
   const argv = Argv.parse(
     await yargs(process.argv.slice(2))
-      .option(`host`, { demandOption: true, type: `string` })
+      .option(`host`, { type: `string` })
       .option(`email`, { demandOption: true, type: `string` })
       .option(`password`, { demandOption: true, type: `string` })
-      .option(`typeName`, { demandOption: true, type: `string` })
-      .option(`specOutFile`, { demandOption: false, type: `string` })
-      .option(`outFile`, { demandOption: true, type: `string` })
+      .option(`typeName`, { type: `string` })
+      .option(`outFile`, { type: `string` })
       .help().argv,
   );
 
-  const { host, email, password, typeName, specOutFile, outFile } = argv;
+  const { host, email, password, typeName, outFile } = argv;
 
   const {
     data: { access_token: token },
@@ -41,98 +168,163 @@ const main = async (): Promise<void> => {
       method: `post`,
       body: JSON.stringify({ email, password, mode: `json` }),
       headers: {
-        "Content-Type": `application/json`,
+        // eslint-disable-next-line prettier/prettier
+        'Content-Type': `application/json`,
       },
     })
   ).json();
 
-  const spec = await (
-    await fetch(`${host}/server/specs/oas`, {
-      method: `get`,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-  ).json();
+  const headers: RequestInit[`headers`] = {
+    Authorization: `Bearer ${token}`,
+  };
 
-  const collections = (await (
-    await fetch(`${host}/collections`, {
-      method: `get`,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-  ).json()) as { data: { collection: string }[] };
+  const { data: collections } = await fetch(new URL(`/collections`, host), {
+    method: `get`,
+    headers,
+  }).then((res) => res.json() as Promise<{ data: CollectionInfo[] }>);
 
-  const collectionsNames = new Map<string, string>(
-    collections.data.map(({ collection }) => [
-      collection.replace(/_/g, ``).toLowerCase(),
-      collection,
-    ]),
+  const collectionsInfo = new Map<string, CollectionInfo>(
+    collections.map((col) => [col.collection, col]),
   );
 
-  if (specOutFile) {
-    await promises.writeFile(
-      resolve(process.cwd(), specOutFile),
-      JSON.stringify(spec, null, 2),
-      {
-        encoding: `utf-8`,
-      },
-    );
+  const { data: fields } = await fetch(new URL(`/fields`, host), {
+    method: `get`,
+    headers,
+  }).then((res) => res.json() as Promise<{ data: FieldInfo[] }>);
+
+  const { data: relations } = await fetch(new URL(`/relations`, host), {
+    method: `get`,
+    headers,
+  }).then((res) => res.json() as Promise<{ data: Relation[] }>);
+
+  const relatedCollectionByKey = new Map<string, string>();
+
+  for (let i = 0, l = relations.length; i < l; i++) {
+    const relation = relations[i];
+    if (relation.meta) {
+      if (
+        relation.meta.many_collection === relation.collection &&
+        relation.meta.one_collection &&
+        relation.meta.one_field
+      ) {
+        relatedCollectionByKey.set(
+          `${relation.meta.one_collection}|${relation.meta.one_field}`,
+          relation.collection,
+        );
+      }
+    }
   }
 
-  const baseSource = openApiTs(spec as OpenAPI3);
+  const collectionIdType = new Map<string, string>();
+  const collectionsMap = new Map<string, Collection>();
 
-  const itemPattern = /^    Items([^\:]*)/;
+  for (let i = 0, l = fields.length; i < l; i++) {
+    const fieldInfo = fields[i];
 
-  const interfacesToAvoid = new Set([`paths`, `operations`]);
+    const avoid =
+      fieldInfo.type === `alias` &&
+      fieldInfo.meta?.special?.some((s) => s === `group` || s === `no-data`);
+
+    if (!avoid) {
+      if (fieldInfo.field === `id`) {
+        const type = types.get(fieldInfo.type);
+        if (type) {
+          collectionIdType.set(fieldInfo.collection, type);
+        } else {
+          console.error(`Missing type for ${fieldInfo.type}`);
+        }
+      }
+      let collection = collectionsMap.get(fieldInfo.collection);
+      if (!collection) {
+        const collectionInfo = collectionsInfo.get(fieldInfo.collection);
+        const translation = collectionInfo?.meta.translations?.find((t) =>
+          t.language.toLowerCase().startsWith(`en`),
+        );
+        const key = pascalCase(
+          translation?.singular ||
+            translation?.translation ||
+            fieldInfo.collection,
+        );
+        collection = {
+          table: fieldInfo.collection,
+          key,
+          fields: new Array<Field>(),
+        };
+        collectionsMap.set(fieldInfo.collection, collection);
+      }
+
+      const field: Field = {
+        key: fieldInfo.field,
+        posibleTypes: new Array<string>(),
+        required: !!fieldInfo.required,
+        nullable:
+          fieldInfo.schema?.is_nullable && !fieldInfo.schema?.is_primary_key,
+      };
+
+      if (
+        fieldInfo.type === `alias` &&
+        fieldInfo.meta?.special?.some((s) => multipleSpecial.has(s))
+      ) {
+        const table = relatedCollectionByKey.get(
+          `${fieldInfo.collection}|${fieldInfo.field}`,
+        );
+        if (table) {
+          field.relation = {
+            table,
+            multiple: true,
+          };
+        } else {
+          console.error(
+            `Table not found for relation ${fieldInfo.field} (${fieldInfo.collection})`,
+          );
+        }
+      }
+
+      if (!field.relation) {
+        field.posibleTypes = getTypes(
+          fieldInfo.field,
+          fieldInfo.type,
+          fieldInfo.meta.options,
+        );
+      }
+
+      collection.fields.push(field);
+    }
+  }
+
   const lines = new Array<string>();
-  let addLine = true;
+  const collectionsData = Array.from(collectionsMap.values());
 
-  const exportProperties = baseSource
-    .split(`\n`)
-    .map((line) => {
-      if (line.startsWith(`export interface`)) {
-        const interfaceName = line.split(` `)[2];
-        addLine = !interfacesToAvoid.has(interfaceName);
-      }
-      if (addLine) {
-        lines.push(line);
-      }
-      const match = line.match(itemPattern);
-      if (!match) {
-        return null;
-      }
-      const [, collectionName] = match;
-      const realCollectionName = collectionsNames.get(
-        collectionName.toLowerCase(),
+  for (let i = 0, l = collectionsData.length; i < l; i++) {
+    const collectionData = collectionsData[i];
+    lines.push(`export interface ${collectionData.key} {`);
+    collectionData.fields.forEach((field) => {
+      lines.push(
+        `  ${field.key}${field.required ? `` : `?`}: ${getTypesText(
+          field.posibleTypes,
+          collectionsMap,
+          collectionIdType,
+          field.nullable,
+          field.relation,
+        )};`,
       );
-      return `  ${
-        realCollectionName || camelCase(collectionName)
-      }: components["schemas"]["Items${collectionName}"];`;
-    })
-    .filter((line): line is string => typeof line === `string`);
+    });
+    lines.push(`}\n`);
+  }
 
-  exportProperties.push(
-    ...[
-      `  directus_users: components["schemas"]["Users"];`,
-      `  directus_roles: components["schemas"]["Roles"];`,
-      `  directus_files: components["schemas"]["Files"];`,
-      `  directus_folders: components["schemas"]["Folders"];`,
-    ],
+  lines.push(
+    `// eslint-disable-next-line @typescript-eslint/consistent-type-definitions`,
   );
+  lines.push(`export type ${typeName} = {`);
+  for (let i = 0, l = collectionsData.length; i < l; i++) {
+    const { key, table } = collectionsData[i];
+    lines.push(`  ${table}: ${key};`);
+  }
+  lines.push(`}\n`);
 
-  const exportSource = `export type ${typeName} = {\n${exportProperties.join(
-    `\n`,
-  )}\n};`;
-
-  await promises.writeFile(
-    resolve(process.cwd(), outFile),
-    [...lines, exportSource].join(`\n`),
-    {
-      encoding: `utf-8`,
-    },
-  );
+  await writeFile(resolve(process.cwd(), outFile), lines.join(`\n`), {
+    encoding: `utf-8`,
+  });
 };
 
 if (require.main === module) {
