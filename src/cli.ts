@@ -310,11 +310,14 @@ const main = async (): Promise<void> => {
   }
 
   const lines = new Array<string>();
+  lines.push(
+    `/* eslint-disable @typescript-eslint/consistent-type-definitions */`,
+  );
   const collectionsData = Array.from(collectionsMap.values());
 
   for (let i = 0, l = collectionsData.length; i < l; i++) {
     const collectionData = collectionsData[i];
-    lines.push(`export interface ${collectionData.key} {`);
+    lines.push(`export type ${collectionData.key} = {`);
     collectionData.fields.forEach((field) => {
       lines.push(
         `  ${field.key}${field.required ? `` : `?`}: ${getTypesText(
@@ -329,9 +332,6 @@ const main = async (): Promise<void> => {
     lines.push(`}\n`);
   }
 
-  lines.push(
-    `// eslint-disable-next-line @typescript-eslint/consistent-type-definitions`,
-  );
   lines.push(`export type ${typeName} = {`);
   for (let i = 0, l = collectionsData.length; i < l; i++) {
     const { key, table } = collectionsData[i];
