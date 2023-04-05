@@ -100,6 +100,10 @@ const types = new Map<string, string>([
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
 const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
 const singleSpecial = new Set<string>([`m2o`, `file`]);
+const stringArrayInterfaces = new Set<string>([
+  `tags`,
+  `select-multiple-checkbox-tree`,
+]);
 
 const getTypes = (
   field: string,
@@ -108,7 +112,11 @@ const getTypes = (
 ): string[] => {
   const res = new Array<string>();
 
-  if (directusType === `json` && meta?.interface === `tags`) {
+  if (
+    directusType === `json` &&
+    meta?.interface &&
+    stringArrayInterfaces.has(meta.interface)
+  ) {
     res.push(`string[]`);
   } else {
     const type = types.get(directusType);
@@ -183,8 +191,6 @@ const main = async (): Promise<void> => {
       },
     })
   ).json();
-
-  console.log({ token });
 
   const headers: RequestInit[`headers`] = {
     Authorization: `Bearer ${token}`,
