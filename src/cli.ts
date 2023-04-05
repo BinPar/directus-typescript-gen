@@ -26,6 +26,7 @@ interface Field {
   relation?: {
     table: string;
     multiple?: boolean;
+    isM2M?: boolean;
   };
 }
 
@@ -74,7 +75,6 @@ interface CollectionInfo {
     translations?: {
       language: string;
       translation: string;
-      singular?: string;
     }[];
   };
 }
@@ -98,6 +98,7 @@ const types = new Map<string, string>([
 
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
 const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
+const singleSpecial = new Set<string>([`m2o`, `file`]);
 
 const getTypes = (
   field: string,
@@ -150,9 +151,11 @@ const getTypesText = (
       console.error(`Collection not found for table ${relation.table}`);
     }
   }
-  return `${res
-    .map((r) => `${r}${relation?.multiple ? `[]` : ``}`)
-    .join(` | `)}${nullable ? ` | null` : ``}`;
+  return `${res.length > 1 ? `(` : ``}${res.map((r) => `${r}`).join(` | `)}${
+    res.length > 1 ? `)` : ``
+  }${relation?.multiple ? `[]` : ``}${
+    nullable && !relation?.multiple ? ` | null` : ``
+  }`;
 };
 
 const main = async (): Promise<void> => {
@@ -249,9 +252,7 @@ const main = async (): Promise<void> => {
           t.language.toLowerCase().startsWith(`en`),
         );
         const key = pascalCase(
-          translation?.singular ||
-            translation?.translation ||
-            fieldInfo.collection,
+          translation?.translation || fieldInfo.collection,
         );
         collection = {
           table: fieldInfo.collection,
@@ -280,6 +281,7 @@ const main = async (): Promise<void> => {
           field.relation = {
             table,
             multiple: true,
+            isM2M: fieldInfo.meta.special.some((s) => s === `m2m`),
           };
         } else {
           console.error(
@@ -290,7 +292,7 @@ const main = async (): Promise<void> => {
 
       if (
         fieldInfo.schema?.foreign_key_table &&
-        fieldInfo.meta?.special?.some((s) => s === `m2o`)
+        fieldInfo.meta?.special?.some((s) => singleSpecial.has(s))
       ) {
         field.relation = {
           table: fieldInfo.schema?.foreign_key_table,
@@ -311,8 +313,9 @@ const main = async (): Promise<void> => {
 
   const lines = new Array<string>();
   lines.push(
-    `/* eslint-disable @typescript-eslint/consistent-type-definitions */`,
+    `/* eslint-disable @typescript-eslint/consistent-type-definitions */\n`,
   );
+
   const collectionsData = Array.from(collectionsMap.values());
 
   for (let i = 0, l = collectionsData.length; i < l; i++) {
@@ -329,7 +332,7 @@ const main = async (): Promise<void> => {
         )};`,
       );
     });
-    lines.push(`}\n`);
+    lines.push(`};\n`);
   }
 
   lines.push(`export type ${typeName} = {`);
@@ -337,7 +340,7 @@ const main = async (): Promise<void> => {
     const { key, table } = collectionsData[i];
     lines.push(`  ${table}: ${key};`);
   }
-  lines.push(`}\n`);
+  lines.push(`};\n`);
 
   await writeFile(resolve(process.cwd(), outFile), lines.join(`\n`), {
     encoding: `utf-8`,
