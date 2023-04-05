@@ -75,6 +75,7 @@ interface CollectionInfo {
     translations?: {
       language: string;
       translation: string;
+      singular?: string;
     }[];
   };
 }
@@ -252,7 +253,9 @@ const main = async (): Promise<void> => {
           t.language.toLowerCase().startsWith(`en`),
         );
         const key = pascalCase(
-          translation?.translation || fieldInfo.collection,
+          translation?.singular ||
+            translation?.translation ||
+            fieldInfo.collection,
         );
         collection = {
           table: fieldInfo.collection,
