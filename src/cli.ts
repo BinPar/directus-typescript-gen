@@ -98,7 +98,7 @@ const types = new Map<string, string>([
 ]);
 
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
-const multipleSpecial = new Set<string>([`o2m`, `m2m`]);
+const multipleSpecial = new Set<string>([`o2m`, `m2m`, `translations`]);
 const singleSpecial = new Set<string>([`m2o`, `file`]);
 const stringArrayInterfaces = new Set<string>([
   `tags`,
