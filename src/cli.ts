@@ -99,7 +99,6 @@ const types = new Map<string, string>([
 
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
 const multipleSpecial = new Set<string>([`o2m`, `m2m`, `translations`]);
-const singleSpecial = new Set<string>([`m2o`, `file`]);
 const stringArrayInterfaces = new Set<string>([
   `tags`,
   `select-multiple-checkbox-tree`,
@@ -160,11 +159,13 @@ const getTypesText = (
       console.error(`Collection not found for table ${relation.table}`);
     }
   }
-  return `${res.length > 1 ? `(` : ``}${res.map((r) => `${r}`).join(` | `)}${
-    res.length > 1 ? `)` : ``
-  }${relation?.multiple ? `[]` : ``}${
-    nullable && !relation?.multiple ? ` | null` : ``
-  }`;
+  const addNull = nullable && !relation?.multiple;
+  const multipleTypes = res.length > 1;
+  return `${multipleTypes && addNull ? `(` : ``}${res
+    .map((r) => `${r}`)
+    .join(` | `)}${multipleTypes && addNull ? `)` : ``}${
+    relation?.multiple ? `[]` : ``
+  }${addNull ? ` | null` : ``}`;
 };
 
 const main = async (): Promise<void> => {
@@ -223,10 +224,12 @@ const main = async (): Promise<void> => {
       if (
         relation.meta.many_collection === relation.collection &&
         relation.meta.one_collection &&
-        relation.meta.one_field
+        (relation.meta.one_field || relation.meta.many_field)
       ) {
         relatedCollectionByKey.set(
-          `${relation.meta.one_collection}|${relation.meta.one_field}`,
+          `${relation.meta.one_collection}|${
+            relation.meta.one_field || relation.meta.many_field
+          }`,
           relation.collection,
         );
       }
@@ -299,10 +302,7 @@ const main = async (): Promise<void> => {
         }
       }
 
-      if (
-        fieldInfo.schema?.foreign_key_table &&
-        fieldInfo.meta?.special?.some((s) => singleSpecial.has(s))
-      ) {
+      if (fieldInfo.schema?.foreign_key_table) {
         field.relation = {
           table: fieldInfo.schema?.foreign_key_table,
         };
@@ -314,6 +314,10 @@ const main = async (): Promise<void> => {
           fieldInfo.type,
           fieldInfo.meta,
         );
+      }
+
+      if (field.key === `collections_id`) {
+        console.log({ fieldInfo, field });
       }
 
       collection.fields.push(field);
