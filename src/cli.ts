@@ -316,10 +316,6 @@ const main = async (): Promise<void> => {
         );
       }
 
-      if (field.key === `collections_id`) {
-        console.log({ fieldInfo, field });
-      }
-
       collection.fields.push(field);
     }
   }
