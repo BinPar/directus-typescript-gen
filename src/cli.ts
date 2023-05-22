@@ -162,9 +162,12 @@ const getTypesText = (
   const addNull = nullable && !relation?.multiple;
   const multipleTypes = res.length > 1;
   return `${multipleTypes && addNull ? `(` : ``}${res
-    .map((r) => `${r}`)
+    .map(
+      (r) =>
+        `${r}${multipleTypes && !addNull && relation?.multiple ? `[]` : ``}`,
+    )
     .join(` | `)}${multipleTypes && addNull ? `)` : ``}${
-    relation?.multiple ? `[]` : ``
+    !(multipleTypes && !addNull) && relation?.multiple ? `[]` : ``
   }${addNull ? ` | null` : ``}`;
 };
 
