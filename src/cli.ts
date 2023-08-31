@@ -14,6 +14,7 @@ const Argv = z.object({
   password: z.string(),
   typeName: z.string().default(`DirectusTypes`),
   outFile: z.string().default(`directus.ts`),
+  legacy: z.boolean().nullish(),
 });
 
 type Argv = z.infer<typeof Argv>;
@@ -34,6 +35,7 @@ interface Collection {
   table: string;
   key: string;
   fields: Field[];
+  singleton: boolean;
 }
 
 interface Relation {
@@ -77,6 +79,7 @@ interface CollectionInfo {
       translation: string;
       singular?: string;
     }[];
+    singleton: boolean;
   };
 }
 
@@ -177,12 +180,13 @@ const main = async (): Promise<void> => {
       .option(`host`, { type: `string` })
       .option(`email`, { demandOption: true, type: `string` })
       .option(`password`, { demandOption: true, type: `string` })
+      .option(`legacy`, { type: `boolean` })
       .option(`typeName`, { type: `string` })
       .option(`outFile`, { type: `string` })
       .help().argv,
   );
 
-  const { host, email, password, typeName, outFile } = argv;
+  const { host, email, password, typeName, outFile, legacy } = argv;
 
   const {
     data: { access_token: token },
@@ -273,6 +277,7 @@ const main = async (): Promise<void> => {
           table: fieldInfo.collection,
           key,
           fields: new Array<Field>(),
+          singleton: !!collectionInfo?.meta?.singleton,
         };
         collectionsMap.set(fieldInfo.collection, collection);
       }
@@ -349,10 +354,19 @@ const main = async (): Promise<void> => {
 
   lines.push(`export type ${typeName} = {`);
   for (let i = 0, l = collectionsData.length; i < l; i++) {
-    const { key, table } = collectionsData[i];
-    lines.push(`  ${table}: ${key};`);
+    const { key, table, singleton } = collectionsData[i];
+    lines.push(`  ${table}: ${key}${!legacy && !singleton ? `[]` : ``};`);
   }
   lines.push(`};\n`);
+
+  if (!legacy) {
+    lines.push(`export enum CollectionNames {`);
+    for (let i = 0, l = collectionsData.length; i < l; i++) {
+      const { table } = collectionsData[i];
+      lines.push(`  ${table} = '${table}'${i !== l - 1 ? `,` : ``}`);
+    }
+    lines.push(`}\n`);
+  }
 
   await writeFile(resolve(process.cwd(), outFile), lines.join(`\n`), {
     encoding: `utf-8`,
