@@ -54,7 +54,6 @@ interface FieldInfo {
   collection: string;
   field: string;
   type: string;
-  required: boolean;
   schema?: {
     is_nullable: boolean;
     is_primary_key: boolean;
@@ -62,12 +61,16 @@ interface FieldInfo {
   };
   meta?: {
     options?: {
-      choices?: {
-        value: string;
-      }[];
+      choices?: (
+        | string
+        | {
+            value: string;
+          }
+      )[];
     };
     special?: string[];
     interface?: string;
+    required: boolean;
   };
 }
 
@@ -129,7 +132,8 @@ const getTypes = (
     ) {
       meta?.options.choices.forEach((choice) => {
         const surrounding = type !== `number` ? `'` : ``;
-        res.push(`${surrounding}${choice.value}${surrounding}`);
+        const choiceText = typeof choice === `string` ? choice : choice.value;
+        res.push(`${surrounding}${choiceText}${surrounding}`);
       });
     } else {
       if (type) {
@@ -285,7 +289,7 @@ const main = async (): Promise<void> => {
       const field: Field = {
         key: fieldInfo.field,
         posibleTypes: new Array<string>(),
-        required: !!fieldInfo.required,
+        required: !!fieldInfo.meta?.required,
         nullable:
           fieldInfo.schema?.is_nullable && !fieldInfo.schema?.is_primary_key,
       };
