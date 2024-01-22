@@ -7,6 +7,7 @@ import fetch, { RequestInit } from "node-fetch";
 import { z } from "zod";
 import yargs from "yargs";
 import { pascalCase } from "change-case";
+import { singular } from "pluralize";
 
 const Argv = z.object({
   host: z.string().default(`http://0.0.0.0:8055`),
@@ -249,6 +250,8 @@ const main = async (): Promise<void> => {
 
   const collectionIdType = new Map<string, string>();
   const collectionsMap = new Map<string, Collection>();
+  const collectionsByKey = new Map<string, Collection[]>();
+  const duplicatedCollectionKeys = new Set<string>();
 
   for (let i = 0, l = fields.length; i < l; i++) {
     const fieldInfo = fields[i];
@@ -277,13 +280,21 @@ const main = async (): Promise<void> => {
             translation?.translation ||
             fieldInfo.collection,
         );
+        const singleton = !!collectionInfo?.meta?.singleton;
         collection = {
           table: fieldInfo.collection,
-          key,
+          key: singleton ? key : singular(key),
           fields: new Array<Field>(),
-          singleton: !!collectionInfo?.meta?.singleton,
+          singleton,
         };
         collectionsMap.set(fieldInfo.collection, collection);
+        collectionsByKey.set(key, [
+          ...(collectionsByKey.get(key) || []),
+          collection,
+        ]);
+        if ((collectionsByKey.get(key)?.length ?? 0) > 1) {
+          duplicatedCollectionKeys.add(key);
+        }
       }
 
       const field: Field = {
@@ -332,6 +343,52 @@ const main = async (): Promise<void> => {
     }
   }
 
+  const duplicatedKeys = Array.from(duplicatedCollectionKeys);
+  for (let i = 0, l = duplicatedKeys.length; i < l; i++) {
+    const key = duplicatedKeys[i];
+    if (key) {
+      const collections = collectionsByKey.get(duplicatedKeys[i]);
+      if (collections?.length) {
+        const lowerKey = key.toLowerCase();
+        collections.sort((a, b) => {
+          if (a.table.length > b.table.length) {
+            return 1;
+          }
+          if (a.table.length < b.table.length) {
+            return -1;
+          }
+          return 0;
+        });
+        const bestMatch =
+          collections.find((col) => col.table.toLowerCase() === lowerKey) ||
+          collections.find((col) =>
+            col.table.toLowerCase().startsWith(lowerKey),
+          ) ||
+          collections[0];
+        if (!bestMatch) {
+          throw Error(
+            `No best match for key ${key} and collections ${collections
+              .map((col) => col.table)
+              .join(`, `)}`,
+          );
+        }
+        for (let j = 0, k = collections.length; j < k; j++) {
+          const collection = collections[j];
+          if (collection) {
+            if (collection.table === bestMatch.table) {
+              collection.key = key;
+            } else {
+              collection.key = pascalCase(collection.table);
+              if (!collection.singleton) {
+                collection.key = singular(collection.key);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   const lines = new Array<string>();
   lines.push(
     `/* eslint-disable @typescript-eslint/consistent-type-definitions */\n`,
@@ -344,7 +401,9 @@ const main = async (): Promise<void> => {
     lines.push(`export type ${collectionData.key} = {`);
     collectionData.fields.forEach((field) => {
       lines.push(
-        `  ${field.key}${field.required ? `` : `?`}: ${getTypesText(
+        `  ${field.key}${
+          field.required || field.key === `id` ? `` : `?`
+        }: ${getTypesText(
           field.posibleTypes,
           collectionsMap,
           collectionIdType,

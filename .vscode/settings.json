@@ -37,7 +37,7 @@
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.suggest.paths": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
+    "source.fixAll.eslint": "explicit"
   },
   "pgFormatter.placeholder": "\\$\\{.*\\}",
   "pgFormatter.noGrouping": true,
