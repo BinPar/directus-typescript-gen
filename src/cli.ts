@@ -277,8 +277,7 @@ const main = async (): Promise<void> => {
         );
         const key = pascalCase(
           translation?.singular ||
-            translation?.translation ||
-            fieldInfo.collection,
+            singular(translation?.translation || fieldInfo.collection),
         );
         const singleton = !!collectionInfo?.meta?.singleton;
         collection = {
