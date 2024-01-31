@@ -338,6 +338,13 @@ const main = async (): Promise<void> => {
         );
       }
 
+      if (
+        fieldInfo.field === `avatar` &&
+        fieldInfo.collection === `directus_users`
+      ) {
+        field.posibleTypes.push(`DirectusFile`);
+      }
+
       collection.fields.push(field);
     }
   }
