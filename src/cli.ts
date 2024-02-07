@@ -68,6 +68,10 @@ interface FieldInfo {
             value: string;
           }
       )[];
+      fields?: {
+        field: string;
+        type: string;
+      }[];
     };
     special?: string[];
     interface?: string;
@@ -78,11 +82,6 @@ interface FieldInfo {
 interface CollectionInfo {
   collection: string;
   meta: {
-    translations?: {
-      language: string;
-      translation: string;
-      singular?: string;
-    }[];
     singleton: boolean;
   };
 }
@@ -136,6 +135,17 @@ const getTypes = (
         const choiceText = typeof choice === `string` ? choice : choice.value;
         res.push(`${surrounding}${choiceText}${surrounding}`);
       });
+    } else if (
+      !fieldsToAvoidChoices.has(field) &&
+      directusType === `json` &&
+      meta?.options?.fields?.length
+    ) {
+      res.push(`{
+    ${meta.options.fields
+      .filter((item) => types.has(item.type))
+      .map((item) => `${item.field}: ${types.get(item.type)};`)
+      .join(`\n    `)}
+  }[]`);
     } else {
       if (type) {
         res.push(type);
@@ -269,16 +279,11 @@ const main = async (): Promise<void> => {
           console.error(`Missing type for ${fieldInfo.type}`);
         }
       }
+
       let collection = collectionsMap.get(fieldInfo.collection);
       if (!collection) {
         const collectionInfo = collectionsInfo.get(fieldInfo.collection);
-        const translation = collectionInfo?.meta.translations?.find((t) =>
-          t.language.toLowerCase().startsWith(`en`),
-        );
-        const key = pascalCase(
-          translation?.singular ||
-            singular(translation?.translation || fieldInfo.collection),
-        );
+        const key = pascalCase(singular(fieldInfo.collection));
         const singleton = !!collectionInfo?.meta?.singleton;
         collection = {
           table: fieldInfo.collection,
