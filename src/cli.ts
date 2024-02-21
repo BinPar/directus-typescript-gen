@@ -104,7 +104,12 @@ const types = new Map<string, string>([
 ]);
 
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
-const multipleSpecial = new Set<string>([`o2m`, `m2m`, `translations`]);
+const multipleSpecial = new Set<string>([
+  `o2m`,
+  `m2m`,
+  `translations`,
+  `files`,
+]);
 const stringArrayInterfaces = new Set<string>([
   `tags`,
   `select-multiple-checkbox-tree`,
@@ -141,11 +146,11 @@ const getTypes = (
       meta?.options?.fields?.length
     ) {
       res.push(`{
-    ${meta.options.fields
-      .filter((item) => types.has(item.type))
-      .map((item) => `${item.field}: ${types.get(item.type)};`)
-      .join(`\n    `)}
-  }[]`);
+      ${meta.options.fields
+        .filter((item) => types.has(item.type))
+        .map((item) => `${item.field}: ${types.get(item.type)};`)
+        .join(`\n    `)}
+    }[]`);
     } else {
       if (type) {
         res.push(type);
