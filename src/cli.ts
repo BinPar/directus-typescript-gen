@@ -112,6 +112,7 @@ const multipleSpecial = new Set<string>([
 ]);
 const stringArrayInterfaces = new Set<string>([
   `tags`,
+  `select-multiple-checkbox`,
   `select-multiple-checkbox-tree`,
 ]);
 
