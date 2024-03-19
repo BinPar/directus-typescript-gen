@@ -147,11 +147,11 @@ const getTypes = (
       meta?.options?.fields?.length
     ) {
       res.push(`{
-      ${meta.options.fields
-        .filter((item) => types.has(item.type))
-        .map((item) => `${item.field}: ${types.get(item.type)};`)
-        .join(`\n    `)}
-    }[]`);
+    ${meta.options.fields
+      .filter((item) => types.has(item.type))
+      .map((item) => `${item.field}: ${types.get(item.type)};`)
+      .join(`\n    `)}
+  }[]`);
     } else {
       if (type) {
         res.push(type);

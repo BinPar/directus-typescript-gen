@@ -4,22 +4,16 @@
   "editor.tabSize": 2,
   "emmet.showAbbreviationSuggestions": false,
   "emmet.showExpandedAbbreviation": "never",
-  "emmet.excludeLanguages": [
-    "typescript",
-    "javascript"
-  ],
+  "emmet.excludeLanguages": ["typescript", "javascript"],
   "eslint.packageManager": "npm",
   "eslint.options": {
-    "extensions": [
-      ".js",
-      ".ts"
-    ]
+    "extensions": [".js", ".ts"]
   },
   "eslint.workingDirectories": [
     {
       "directory": ".",
       "changeProcessCWD": true
-    },
+    }
   ],
   "eslint.lintTask.enable": true,
   "files.associations": {
@@ -46,5 +40,5 @@
   "editor.suggest.snippetsPreventQuickSuggestions": false,
   "editor.snippetSuggestions": "none",
   "editor.wordWrap": "on",
-  "editor.formatOnSave": true
+  "editor.formatOnSave": false
 }
