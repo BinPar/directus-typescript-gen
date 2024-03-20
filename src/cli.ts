@@ -71,6 +71,9 @@ interface FieldInfo {
       fields?: {
         field: string;
         type: string;
+        meta?: {
+          required?: boolean;
+        };
       }[];
     };
     special?: string[];
@@ -149,7 +152,12 @@ const getTypes = (
       res.push(`{
     ${meta.options.fields
       .filter((item) => types.has(item.type))
-      .map((item) => `${item.field}: ${types.get(item.type)};`)
+      .map(
+        (item) =>
+          `${item.field}${item.meta?.required ? `` : `?`}: ${types.get(
+            item.type,
+          )};`,
+      )
       .join(`\n    `)}
   }[]`);
     } else {
