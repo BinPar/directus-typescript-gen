@@ -117,6 +117,7 @@ const stringArrayInterfaces = new Set<string>([
   `tags`,
   `select-multiple-checkbox`,
   `select-multiple-checkbox-tree`,
+  `directus-book-spine-checkbox-tree`,
 ]);
 
 const getTypes = (
