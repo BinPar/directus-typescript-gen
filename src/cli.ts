@@ -93,6 +93,7 @@ const types = new Map<string, string>([
   [`string`, `string`],
   [`uuid`, `string`],
   [`timestamp`, `string`],
+  [`time`, `string`],
   [`dateTime`, `string`],
   [`date`, `string`],
   [`integer`, `number`],
