@@ -287,7 +287,7 @@ const main = async (): Promise<void> => {
       fieldInfo.meta?.special?.some((s) => s === `group` || s === `no-data`);
 
     if (!avoid) {
-      if (fieldInfo.field === `id`) {
+      if (fieldInfo.schema?.is_primary_key) {
         const type = types.get(fieldInfo.type);
         if (type) {
           collectionIdType.set(fieldInfo.collection, type);
