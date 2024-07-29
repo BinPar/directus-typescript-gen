@@ -16,6 +16,7 @@ const Argv = z.object({
   typeName: z.string().default(`DirectusTypes`),
   outFile: z.string().default(`directus.ts`),
   legacy: z.boolean().nullish(),
+  newTypes: z.boolean().nullish(),
 });
 
 type Argv = z.infer<typeof Argv>;
@@ -107,6 +108,24 @@ const types = new Map<string, string>([
   [`float`, `number`],
 ]);
 
+const newTypes = new Map<string, string>([
+  [`string`, `string`],
+  [`uuid`, `string`],
+  [`time`, `string`],
+  [`timestamp`, `'datetime'`],
+  [`dateTime`, `'datetime'`],
+  [`date`, `'datetime'`],
+  [`integer`, `number`],
+  [`boolean`, `boolean`],
+  [`text`, `'json'`],
+  [`json`, `string`],
+  [`alias`, `number`],
+  [`csv`, `'csv'`],
+  [`bigInteger`, `number`],
+  [`hash`, `string`],
+  [`float`, `number`],
+]);
+
 const fieldsToAvoidChoices = new Set<string>([`auth_password_policy`]);
 const multipleSpecial = new Set<string>([
   `o2m`,
@@ -114,12 +133,15 @@ const multipleSpecial = new Set<string>([
   `translations`,
   `files`,
 ]);
-const stringArrayInterfaces = new Set<string>([
-  `tags`,
-  `select-multiple-checkbox`,
-  `select-multiple-checkbox-tree`,
-  `directus-book-spine-checkbox-tree`,
-]);
+
+// const stringArrayInterfaces = new Set<string>([
+//   `tags`,
+//   `select-multiple-checkbox`,
+//   `select-multiple-checkbox-tree`,
+//   `directus-book-spine-checkbox-tree`,
+// ]);
+
+let useNewTypes = false;
 
 const getTypes = (
   field: string,
@@ -128,48 +150,42 @@ const getTypes = (
 ): string[] => {
   const res = new Array<string>();
 
+  const typesMap = useNewTypes ? newTypes : types;
+  const type = typesMap.get(directusType);
   if (
-    directusType === `json` &&
-    meta?.interface &&
-    stringArrayInterfaces.has(meta.interface)
+    !fieldsToAvoidChoices.has(field) &&
+    directusType !== `json` &&
+    meta?.options?.choices?.length
   ) {
-    res.push(`string[]`);
+    meta?.options.choices.forEach((choice) => {
+      const surrounding = type !== `number` ? `'` : ``;
+      const choiceText = typeof choice === `string` ? choice : choice.value;
+      res.push(`${surrounding}${choiceText}${surrounding}`);
+    });
+  } else if (
+    !fieldsToAvoidChoices.has(field) &&
+    directusType === `json` &&
+    meta?.options?.fields?.length
+  ) {
+    res.push(`{
+  ${meta.options.fields
+    .filter((item) => typesMap.has(item.type))
+    .map(
+      (item) =>
+        `${item.field}${item.meta?.required ? `` : `?`}: ${typesMap.get(
+          item.type,
+        )};`,
+    )
+    .join(`\n    `)}
+}[]`);
   } else {
-    const type = types.get(directusType);
-    if (
-      !fieldsToAvoidChoices.has(field) &&
-      directusType !== `json` &&
-      meta?.options?.choices?.length
-    ) {
-      meta?.options.choices.forEach((choice) => {
-        const surrounding = type !== `number` ? `'` : ``;
-        const choiceText = typeof choice === `string` ? choice : choice.value;
-        res.push(`${surrounding}${choiceText}${surrounding}`);
-      });
-    } else if (
-      !fieldsToAvoidChoices.has(field) &&
-      directusType === `json` &&
-      meta?.options?.fields?.length
-    ) {
-      res.push(`{
-    ${meta.options.fields
-      .filter((item) => types.has(item.type))
-      .map(
-        (item) =>
-          `${item.field}${item.meta?.required ? `` : `?`}: ${types.get(
-            item.type,
-          )};`,
-      )
-      .join(`\n    `)}
-  }[]`);
+    if (type) {
+      res.push(type);
     } else {
-      if (type) {
-        res.push(type);
-      } else {
-        console.error(`Type ${directusType} missing`);
-      }
+      console.error(`Type ${directusType} missing`);
     }
   }
+
   return res;
 };
 
@@ -212,12 +228,17 @@ const main = async (): Promise<void> => {
       .option(`email`, { demandOption: true, type: `string` })
       .option(`password`, { demandOption: true, type: `string` })
       .option(`legacy`, { type: `boolean` })
+      .option(`newTypes`, { type: `boolean` })
       .option(`typeName`, { type: `string` })
       .option(`outFile`, { type: `string` })
       .help().argv,
   );
 
   const { host, email, password, typeName, outFile, legacy } = argv;
+
+  useNewTypes = !!argv.newTypes;
+
+  const typesMap = useNewTypes ? newTypes : types;
 
   const {
     data: { access_token: token },
@@ -288,7 +309,7 @@ const main = async (): Promise<void> => {
 
     if (!avoid) {
       if (fieldInfo.schema?.is_primary_key) {
-        const type = types.get(fieldInfo.type);
+        const type = typesMap.get(fieldInfo.type);
         if (type) {
           collectionIdType.set(fieldInfo.collection, type);
         } else {
@@ -456,6 +477,28 @@ const main = async (): Promise<void> => {
       lines.push(`  ${table} = '${table}'${i !== l - 1 ? `,` : ``}`);
     }
     lines.push(`}\n`);
+  }
+
+  if (useNewTypes) {
+    lines.push(`
+type TypesMap = {
+  json: string;
+  csv: string;
+  datetime: string;
+};
+
+export type DirectusToPrimitive<
+  Item extends Record<string, unknown>,
+> = {
+  [F in keyof Item]: Extract<Item[F], keyof TypesMap> extends infer A
+      ? A[] extends never[]
+        ? Item[F]
+        : A extends keyof TypesMap
+          ? TypesMap[A] | Exclude<Item[F], A>
+          : Item[F]
+      : Item[F];
+};
+`);
   }
 
   await writeFile(resolve(process.cwd(), outFile), lines.join(`\n`), {
