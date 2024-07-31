@@ -117,8 +117,8 @@ const newTypes = new Map<string, string>([
   [`date`, `'datetime'`],
   [`integer`, `number`],
   [`boolean`, `boolean`],
-  [`text`, `'json'`],
-  [`json`, `string`],
+  [`text`, `string`],
+  [`json`, `'json'`],
   [`alias`, `number`],
   [`csv`, `'csv'`],
   [`bigInteger`, `number`],
@@ -481,8 +481,11 @@ const main = async (): Promise<void> => {
 
   if (useNewTypes) {
     lines.push(`
+type JsonPrimitive = null | boolean | number | string;
+type JsonValue = JsonPrimitive | JsonPrimitive[] | { [key: string]: JsonValue };
+
 type TypesMap = {
-  json: string;
+  json: JsonValue;
   csv: string;
   datetime: string;
 };
