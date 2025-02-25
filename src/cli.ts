@@ -152,6 +152,7 @@ const getTypes = (
 
   const typesMap = useNewTypes ? newTypes : types;
   const type = typesMap.get(directusType);
+
   if (
     !fieldsToAvoidChoices.has(field) &&
     directusType !== `json` &&
@@ -178,6 +179,9 @@ const getTypes = (
     )
     .join(`\n    `)}
 }[]`);
+    if (type) {
+      res.push(type);
+    }
   } else {
     if (type) {
       res.push(type);
