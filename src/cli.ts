@@ -85,7 +85,7 @@ interface FieldInfo {
 
 interface CollectionInfo {
   collection: string;
-  meta: {
+  meta?: {
     singleton: boolean;
   };
 }
@@ -187,6 +187,7 @@ const getTypes = (
       res.push(type);
     } else {
       console.error(`Type ${directusType} missing`);
+      res.push(`unknown`);
     }
   }
 
@@ -324,6 +325,9 @@ const main = async (): Promise<void> => {
       let collection = collectionsMap.get(fieldInfo.collection);
       if (!collection) {
         const collectionInfo = collectionsInfo.get(fieldInfo.collection);
+        if (collectionInfo && !collectionInfo.meta) {
+          continue;
+        }
         const key = pascalCase(singular(fieldInfo.collection));
         const singleton = !!collectionInfo?.meta?.singleton;
         collection = {
